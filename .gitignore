@@ -1,0 +1,7 @@
+.DS_Store
+.idea
+*.log
+tmp/
+
+data/merra/*.nc
+data/merra/*.pdf

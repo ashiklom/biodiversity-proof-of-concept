@@ -1,13 +1,22 @@
 library(raster)
 
 # Read biomass from VSEM
-vsem <- brick("data/vsem-agb.tif")
+vsem <- brick("data/vsem-totb.tif")
 
 # Read biomass from Madingley
 mad_files <- list.files("data/madingley", "biomass.*\\.tif", full.names = TRUE)
 mad_biomass <- stack(mad_files)
 mad_biomass_sub <- crop(mad_biomass, vsem)
 
-par(mfrow = c(1, 2))
-plot(mad_biomass_sub[[1]])
-plot(vsem[[1]])
+vsem_reproj <- resample(vsem, mad_biomass_sub)
+mad_biomass_sub
+
+mad_range <- range(mad_biomass_range)
+vsem_range <- range(vsem_reproj)
+
+df <- mad_range - vsem_range
+
+mad_vsem_overlap <- (mad_range[["range_max"]] > vsem_range[["range_min"]]) &
+  (mad_range[["range_min"]] < vsem_range[["range_max"]])
+
+plot(mad_vsem_overlap)

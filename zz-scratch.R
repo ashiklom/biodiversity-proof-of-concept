@@ -2,14 +2,16 @@ library(BayesianTools)
 library(ncdf4)
 library(dplyr)
 library(udunits2)
+library(ggplot2)
+library(sf)
 ## library(raster)
 
 ncfiles <- list.files("data/merra", full.names = TRUE,
                       pattern = ".*\\.nc")
 
 # Extract coordinates (only need to do this once)
-r <- brick(ncfiles[1], varname = "SWGNT")
-coord <- coordinates(r)
+## r <- brick(ncfiles[1], varname = "SWGNT")
+## coord <- coordinates(r)
 
 read_ncfile <- function(f) {
   # Determine time string
@@ -34,7 +36,7 @@ dat2 <- as_tibble(dat) %>%
 
 dat_daily <- dat2 %>%
   group_by(date = as.Date(datetime), lat, lon) %>%
-  summarize(PAR = mean(sw_net_mj)) %>%
+  summarize(PAR = mean(sw_net_mj / 2)) %>%
   ungroup()
 
 VSEM_random <- function(PAR) {
@@ -52,18 +54,41 @@ VSEM_random <- function(PAR) {
     Cr = rnorm(1, 3, 0.5)
   )
   VSEM(pars, PAR = PAR)
+  # TODO: All I care about is final biomass; can save a lot of memory that way
 }
 
-vsem_out_l <- list()
-for (i in 1:10) {
-  vsem_out_l[[i]] <- VSEM_random(dat_daily[["PAR"]])
-}
+out1 <- VSEM_random(dat_daily[["PAR"]]) %>%
+  as_tibble() %>%
+  bind_cols(dat_daily)
+
+out2 <- st_as_sf(out1, coords = c("lon", "lat"), crs = 4326)
+
+usamap <- rnaturalearth::ne_states(country = "united states of america",
+                                   returnclass = "sf")
+
+out2 %>%
+  filter(date == date[[1]]) %>%
+  ggplot() +
+  geom_sf(data = st_crop(usamap, st_bbox(out2))) +
+  geom_sf(aes(color = NEE), size = 10) +
+  scale_color_viridis_c()
+
+out1 %>%
+  filter(lat == tail(lat, 1), lon == tail(lon, 1)) %>%
+  ggplot() +
+  aes(x = date, y = CR) +
+  geom_line()
+
+VSEM
+
+## z <- out2 %>%
+##   filter(geometry == tail(geometry, 1))
 
 ## vsem_out_raw <- VSEM(PAR = dat_daily[["PAR"]])
-vsem_out_ens <- bind_rows(lapply(
-  1:100,
-  function(i) mutate(dat_daily, iens = i, vsem = list(VSEM_random(PAR)))
-))
+## vsem_out_ens <- bind_rows(lapply(
+##   1:100,
+##   function(i) mutate(dat_daily, iens = i, vsem = list(VSEM_random(PAR)))
+## ))
 
 vsem_out <- dat_daily %>%
   mutate(vsem = VSEM(PAR = PAR))

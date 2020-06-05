@@ -3,5 +3,6 @@
 *.log
 tmp/
 
+data/
 data/merra/*.nc
 data/merra/*.pdf

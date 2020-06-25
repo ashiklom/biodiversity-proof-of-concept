@@ -14,19 +14,30 @@ plan <- drake_plan(
     madingley_get_biomass(file_in(ncfile), file_out(outfile)),
     transform = map(ncfile = !!ncfiles, outfile = !!outfiles)
   ),
-  merra_par = prepare_merra_par(merrafiles),
-  vsem_raw = vsem_grid_ensemble(merra_par$data),
-  vsem_biomass = raster::brick(
+  merra_stars = prepare_merra_par(merrafiles),
+  vsem_Cv0 = {
+    f <- tempfile(fileext = ".tif")
+    stars::write_stars(dplyr::slice(merra_stars, time, 1), f)
+    mb <- raster::raster(f)
+    r <- raster::resample(mad_biomass_all, mb)
+    raster::calc(r, mean)
+  },
+  vsem_raw = vsem_grid_ensemble(dplyr::pull(merra_stars), vsem_Cv0),
+  vsem_biomass = {
+    bb <- sf::st_bbox(merra_stars)
+    r <- raster::brick(
       vsem_raw$bout[,,,2],
-      xmn = merra_par$bbox["xmin"], xmx = merra_par$bbox["xmax"],
-      ymn = merra_par$bbox["ymin"], ymx = merra_par$bbox["ymax"],
+      xmn = bb["xmin"], xmx = bb["xmax"],
+      ymn = bb["ymin"], ymx = bb["ymax"],
       transpose = TRUE,
-      crs = "+init=epsg:4326"
-    ),
+      crs = "+init=epsg:4326")
+    r[r <= 0] <- 0
+    r
+  },
+  mad_biomass_all = raster::stack(file_in(!!outfiles)),
   mad_biomass = {
-    mad_biomass <- raster::stack(file_in(!!outfiles))
-    mad_biomass_sub <- raster::crop(mad_biomass, vsem_biomass)
-    mad_biomass_sub[mad_biomass_sub == 0] <- NA
+    mad_biomass_sub <- raster::crop(mad_biomass_all, vsem_biomass)
+    mad_biomass_sub[mad_biomass_sub <= 0] <- NA
     mad_biomass_sub
   },
   vsem_reproj = raster::resample(vsem_biomass, mad_biomass),

@@ -34,15 +34,16 @@ VSEM_random <- function(PAR, Cv0 = 3) {
   pars <- c(
     KEXT = rnorm_gt0(1, 0.5, 0.15),
     LAR = rnorm_gt0(1, 1.5, 0.3),
-    LUE = rnorm_gt0(1, 0.002, 0.001),
-    GAMMA = rnorm(1, 0.4, 0.1),
+    # Default LUE: 0.002
+    LUE = rlnorm(1, log(0.002), 0.4),
+    GAMMA = rnorm_gt0(1, 0.4, 0.1),
     tauV = rnorm(1, 1440, 10),
     tauS = rnorm(1, 27370, 100),
     tauR = rnorm(1, 1440, 10),
     Av = rnorm(1, 0.5, 0.05),
     Cv = rnorm(1, Cv0, 0.5),
-    Cs = rnorm(1, Cv0*5, 1),
-    Cr = rnorm(1, Cv0, 0.5)
+    Cs = rnorm(1, 15, 1),
+    Cr = rnorm(1, 3, 0.5)
   )
   list(
     vsem = BayesianTools::VSEM(pars, PAR = PAR),
@@ -87,6 +88,7 @@ vsem_grid_ensemble <- function(merra_par, vsem_Cv0 = NULL, nens = 100) {
   bparam <- matrix(numeric(), nens, length(vsem_test$params))
   colnames(bparam) <- names(vsem_test$params)
   for (i in seq_len(ny1)) {
+    message("Progress: ", i, " of ", ny1)
     for (j in seq_len(ny2)) {
       if (!all(is.na(merra_par[i,j,]))) {
         if (!is.null(vsem_Cv0)) {

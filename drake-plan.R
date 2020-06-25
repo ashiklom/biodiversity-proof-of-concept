@@ -15,14 +15,7 @@ plan <- drake_plan(
     transform = map(ncfile = !!ncfiles, outfile = !!outfiles)
   ),
   merra_stars = prepare_merra_par(merrafiles),
-  vsem_Cv0 = {
-    f <- tempfile(fileext = ".tif")
-    stars::write_stars(dplyr::slice(merra_stars, time, 1), f)
-    mb <- raster::raster(f)
-    r <- raster::resample(mad_biomass_all, mb)
-    raster::calc(r, mean)
-  },
-  vsem_raw = vsem_grid_ensemble(dplyr::pull(merra_stars), vsem_Cv0),
+  vsem_raw = vsem_grid_ensemble(dplyr::pull(merra_stars)),
   vsem_biomass = {
     bb <- sf::st_bbox(merra_stars)
     r <- raster::brick(

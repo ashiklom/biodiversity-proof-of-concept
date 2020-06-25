@@ -7,3 +7,4 @@ data/
 data/merra/*.nc
 data/merra/*.pdf
 /.drake/
+/figures/

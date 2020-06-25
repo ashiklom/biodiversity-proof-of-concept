@@ -20,3 +20,82 @@ madingley_get_biomass <- function(ncfile, outfile) {
   raster::writeRaster(biomass_r, outfile, overwrite = TRUE)
   invisible(outfile)
 }
+
+VSEM_random <- function(PAR) {
+  # TODO: Need to save the parameter values
+  pars <- c(
+    KEXT = rnorm(1, 0.5, 0.05),
+    LAR = rnorm(1, 1.5, 0.1),
+    LUE = rnorm(1, 0.002, 0.0001),
+    GAMMA = rnorm(1, 0.4, 0.05),
+    tauV = rnorm(1, 1440, 10),
+    tauS = rnorm(1, 27370, 100),
+    tauR = rnorm(1, 1440, 10),
+    Av = rnorm(1, 0.5, 0.05),
+    Cv = rnorm(1, 3, 0.5),
+    Cs = rnorm(1, 15, 1),
+    Cr = rnorm(1, 3, 0.5)
+  )
+  list(
+    vsem = BayesianTools::VSEM(pars, PAR = PAR),
+    params = pars
+  )
+}
+
+prepare_merra_par <- function(merrafiles) {
+  # Country boundaries polygon
+  land <- rnaturalearth::ne_countries(
+    continent = "North America",
+    returnclass = "sf"
+  )
+
+  # Madingley maximum is 64.5
+  lat_max <- 64.5
+  lat_min <- 35
+  lon_min <- -165
+  lon_max <- -50
+  bbox <- sf::st_bbox(c(xmin = lon_min, xmax = lon_max,
+                        ymin = lat_min, ymax = lat_max),
+                      crs = 4326)
+  # Subset the land mask to the Madingley polygon
+  land_sub <- sf::st_crop(land, bbox)
+
+  # Read MERRA
+  s <- stars::read_stars(merrafiles, sub = "SWGDN")
+  sf::st_crs(s) <- sf::st_crs(4326)
+  # Subset to just the North America land
+  s_sub <- sf::st_crop(s, land_sub)
+  # Extract the SW data
+  list(
+    data = dplyr::pull(s_sub),
+    bbox = sf::st_bbox(s_sub)
+  )
+}
+
+vsem_grid_ensemble <- function(merra_par, nens = 100) {
+  # HACK: X vectors for interpolating from monthly to daily
+  x1 <- seq(1, 12)
+  x2 <- seq(1, 12, length.out = 365)
+  ny1 <- dim(merra_par)[1]
+  ny2 <- dim(merra_par)[2]
+
+  vsem_test <- VSEM_random(1)
+  bout <- array(numeric(), c(ny1, ny2, nens, 4))
+  bparam <- matrix(numeric(), nens, length(vsem_test$params))
+  colnames(bparam) <- names(vsem_test$params)
+  pb <- progress::progress_bar$new(total = ny1 * ny2)
+  for (i in seq_len(ny1)) {
+    for (j in seq_len(ny2)) {
+      if (!all(is.na(merra_par[i,j,]))) {
+        par <- spline(x1, xout = x2, y = merra_par[i,j,])$y / 2
+        for (s in seq_len(nens)) {
+          vsem <- VSEM_random(par)
+          bparam[s,] <- vsem$params
+          bout[i,j,s,] <- colMeans(vsem$vsem)
+        }
+      }
+      pb$tick()
+    }
+  }
+  list(bout = bout, bpaam = bparam)
+}

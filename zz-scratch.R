@@ -135,4 +135,49 @@ ncatt_get(nc, "SWGNT")
 
 plot(dat[1,1,], type = "l")
 
+PAR <- dat[1,1,]
+plot(PAR, type = 'l')
+
+pars
+out <- BayesianTools::VSEM(pars, PAR = dat[1,1,])
+
+VSEM_random(1)
+
 VSEM(PAR=dat[1,1])
+
+##################################################
+loadd(mad_biomass)
+loadd(vsem_biomass)
+
+merra_coords <- merra_par$coords
+mp <- merra_par$data
+
+pt <- sp::SpatialPoints(t(c(merra_x[1], merra_y[1])), sp::CRS("+init=epsg:4326"))
+rowMeans(raster::extract(mad_biomass_all, pt))
+
+merra_xy <- dplyr::distinct(merra_coords, x, y)
+merra_sp <- sf::st_as_sf(merra_xy, coords = c("x", "y"))
+biomass <- raster::extract(mad_biomass_all, merra_sp)
+
+library(raster)
+library(stars)
+merra_stars
+a <- dplyr::slice(merra_stars, time, 1)
+b <- raster::brick(a)
+merra_stars[[1]]
+
+##################################################
+library(raster)
+library(stars)
+merra_r <- raster(merrafiles[1], varname = "LWGEM")
+fpar_orig <- raster("data/modis_fpar.tif")
+fpar_merra <- resample(fpar_orig, merra_r)
+
+m <- t(as.matrix(fpar_merra))
+m <- st_as_stars(fpar_merra)
+dim(dplyr::pull(st_as_stars(fpar_merra)))
+
+x <- as.matrix(fpar_merra)
+dim(dplyr::pull(merra_stars))
+
+##################################################

@@ -96,7 +96,7 @@ vsem_grid_ensemble <- function(merra_par, vsem_Cv0 = NULL, nens = 100) {
         } else {
           Cv0 <- 3
         }
-        if (!Cv0 > 0) next
+        if (!is.na(Cv0) & !Cv0 > 0) next
         par <- spline(x1, xout = x2, y = merra_par[i,j,])$y / 2
         for (s in seq_len(nens)) {
           vsem <- VSEM_random(par, Cv0)

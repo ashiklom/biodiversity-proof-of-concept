@@ -43,6 +43,13 @@ plan <- drake_plan(
     mad_biomass_sub
   },
   vsem_reproj = raster::resample(vsem_biomass, mad_biomass),
+  mad_vsem_distribution = distribution_overlap(vsem_reproj, mad_biomass),
+  distribution_plot = {
+    png(file_out("figures/biomass-overlap-distribution.png"),
+        width = 4, height = 4, units = "in", res = 300)
+    plot(mad_vsem_distribution, main = "Fraction distribution overlap")
+    dev.off()
+  },
   mad_range = range(mad_biomass),
   vsem_range = range(vsem_reproj),
   rangeplot = {

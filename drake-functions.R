@@ -31,20 +31,6 @@ rnorm_gt0 <- function(...) {
 
 VSEM_random <- function(PAR, Cv0 = 3) {
   # TODO: Need to save the parameter values
-  pars <- c(
-    KEXT = rnorm_gt0(1, 0.5, 0.15),
-    LAR = rnorm_gt0(1, 1.5, 0.3),
-    # Default LUE: 0.002
-    LUE = rlnorm(1, log(0.002), 0.4),
-    GAMMA = rnorm_gt0(1, 0.4, 0.1),
-    tauV = rnorm(1, 1440, 10),
-    tauS = rnorm(1, 27370, 100),
-    tauR = rnorm(1, 1440, 10),
-    Av = rnorm(1, 0.5, 0.05),
-    Cv = rnorm(1, Cv0, 0.5),
-    Cs = rnorm(1, 15, 1),
-    Cr = rnorm(1, 3, 0.5)
-  )
   list(
     vsem = BayesianTools::VSEM(pars, PAR = PAR),
     params = pars
@@ -83,10 +69,23 @@ vsem_grid_ensemble <- function(merra_par, vsem_Cv0 = NULL, nens = 100) {
   ny1 <- dim(merra_par)[1]
   ny2 <- dim(merra_par)[2]
 
-  vsem_test <- VSEM_random(1)
+  bparam <- cbind(
+    KEXT = rnorm_gt0(nens, 0.5, 0.15),
+    LAR = rnorm_gt0(nens, 1.5, 0.3),
+    # Default LUE: 0.002
+    ## LUE = rlnorm(1, log(0.002), 0.4),
+    LUE = rnorm_gt0(nens, 0.002, 0.0005),
+    GAMMA = rnorm_gt0(nens, 0.4, 0.05),
+    tauV = rnorm(nens, 1440, 10),
+    tauS = rnorm(nens, 27370, 100),
+    tauR = rnorm(nens, 1440, 10),
+    Av = rnorm(nens, 0.5, 0.05),
+    Cv = rnorm(nens, 3, 0.5),
+    Cs = rnorm(nens, 15, 1),
+    Cr = rnorm(nens, 3, 0.5)
+  )
+
   bout <- array(numeric(), c(ny1, ny2, nens, 4))
-  bparam <- matrix(numeric(), nens, length(vsem_test$params))
-  colnames(bparam) <- names(vsem_test$params)
   for (i in seq_len(ny1)) {
     message("Progress: ", i, " of ", ny1)
     for (j in seq_len(ny2)) {
@@ -106,5 +105,36 @@ vsem_grid_ensemble <- function(merra_par, vsem_Cv0 = NULL, nens = 100) {
       }
     }
   }
-  list(bout = bout, bpaam = bparam)
+  list(bout = bout, bparam = bparam)
+}
+
+distribution_overlap <- function(r1, r2) {
+  stopifnot(nrow(r1) == nrow(r2),
+            ncol(r1) == ncol(r2))
+  r1_mean <- calc(r1, mean)
+  r1_sd <- calc(r1, sd)
+  r2_mean <- mean(r2)
+  r2_sd <- calc(r2, sd)
+
+  f <- function(x, m1, s1, m2, s2) {
+    f1 <- dnorm(x, m1, s1)
+    f2 <- dnorm(x, m2, s2)
+    pmin(f1, f2)
+  }
+
+  f_int <- function(VM, VS, MM, MS) {
+    integrate(f, -Inf, Inf, VM, VS, MM, MS)$value
+  }
+
+  intmat <- matrix(numeric(), nrow(r1), ncol(r1))
+  for (i in 1:nrow(r1)) {
+    for (j in 1:ncol(r1)) {
+      if (is.na(r1_mean[i,j]) | is.na(r2_mean[i,j])) next
+      intmat[i,j] <- f_int(r1_mean[i,j], r1_sd[i,j],
+                           r2_mean[i,j], r2_sd[i,j])
+    }
+  }
+  intrast <- raster(r1)
+  intrast[] <- intmat
+  intrast
 }

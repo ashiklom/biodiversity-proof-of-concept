@@ -181,3 +181,41 @@ x <- as.matrix(fpar_merra)
 dim(dplyr::pull(merra_stars))
 
 ##################################################
+vsem_d <- density(vsem_reproj[10,50])
+mad_d <- density(sample(mad_biomass[10,50], 5000, replace = TRUE), n = 20)
+normalize <- function(x) x / max(x, na.rm = TRUE)
+plot(vsem_d$x, normalize(vsem_d$y), type = "l")
+curve(dnorm(x, mean(mad_biomass[10,50]), sd(mad_biomass[10,50])),
+      add = TRUE, col = "green")
+
+vsem_mean <- calc(vsem_reproj, mean)
+vsem_sd <- calc(vsem_reproj, sd)
+mad_mean <- mean(mad_biomass)
+mad_sd <- calc(mad_biomass, sd)
+
+combined <- brick(list(
+  VM = vsem_mean, VS = vsem_sd,
+  MM = mad_mean, MS = mad_sd
+))
+
+intmat <- matrix(numeric(), nrow(vsem_mean), ncol(vsem_mean))
+for (i in 1:nrow(vsem_mean)) {
+  for (j in 1:ncol(vsem_mean)) {
+    if (is.na(mad_mean[i,j]) | is.na(vsem_mean[i,j])) next
+    intmat[i,j] <- c_int(vsem_mean[i,j], vsem_sd[i,j],
+                         mad_mean[i,j], mad_sd[i,j])
+  }
+}
+
+intrast <- raster(combined)
+intrast[] <- intmat
+
+plot(intrast)
+
+vsem_sd[1,1]
+
+c_int2 <- Vectorize(c_int)
+
+iint <- overlay(combined, fun = c_int2)
+
+dim(vsem_reproj)

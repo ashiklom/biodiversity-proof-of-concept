@@ -219,3 +219,23 @@ c_int2 <- Vectorize(c_int)
 iint <- overlay(combined, fun = c_int2)
 
 dim(vsem_reproj)
+
+##################################################
+# How to do normal-normal data assimlation...
+i <- seq(-1, 3, 0.01)
+mx <- 0
+sx <- 0.3
+my <- 2
+sy <- 0.5
+x <- dnorm(i, mx, sx)
+y <- dnorm(i, my, sy)
+px <- 1 / sx^2
+py <- 1 / sy^2
+mz <- (mx * px + my * py) / (px + py)
+sz <- sqrt(1 / (px + py))
+z <- dnorm(i, mz, sz)
+normalize <- function(x) x / max(x)
+plot(i, normalize(x), type = 'l')
+lines(i, normalize(y), col = "red")
+lines(i, normalize(x * y), col = "blue")
+lines(i, normalize(z), col = "green4")

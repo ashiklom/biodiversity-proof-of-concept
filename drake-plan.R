@@ -23,51 +23,35 @@ plan <- drake_plan(
     fpar_orig <- raster(file_in("data/modis_fpar.tif"))
     resample(fpar_orig, merra_r)
   },
-  vsem_raw = vsem_grid_ensemble(dplyr::pull(merra_stars),
-                                3 * as.matrix(merra_fpar) / 100),
-  vsem_biomass = {
-    bb <- sf::st_bbox(merra_stars)
-    r <- raster::brick(
-      vsem_raw$bout[,,,2],
-      xmn = bb["xmin"], xmx = bb["xmax"],
-      ymn = bb["ymin"], ymx = bb["ymax"],
-      transpose = TRUE,
-      crs = "+init=epsg:4326")
-    r[r <= 0] <- 0
-    r
-  },
   mad_biomass_all = raster::stack(file_in(!!outfiles)),
   mad_biomass = {
-    mad_biomass_sub <- raster::crop(mad_biomass_all, vsem_biomass)
+    mad_biomass_sub <- raster::crop(mad_biomass_all, merra_fpar)
     mad_biomass_sub[mad_biomass_sub <= 0] <- NA
     mad_biomass_sub
   },
-  vsem_reproj = raster::resample(vsem_biomass, mad_biomass),
-  mad_vsem_distribution = distribution_overlap(vsem_reproj, mad_biomass),
+  mstmip_stats = raster::resample(
+    raster::brick(file_in("data/mstmip-stats.tif")),
+    mad_biomass
+  ),
+  mad_stats = raster::stack(list(
+    Mean = mean(mad_biomass),
+    SD = calc(mad_biomass, sd)
+  )),
+  distribution_raster = distribution_overlap(mstmip_stats, mad_stats),
   distribution_plot = {
     png(file_out("figures/biomass-overlap-distribution.png"),
-        width = 4, height = 4, units = "in", res = 300)
-    plot(mad_vsem_distribution, main = "Fraction distribution overlap")
-    dev.off()
-  },
-  mad_range = range(mad_biomass),
-  vsem_range = range(vsem_reproj),
-  rangeplot = {
-    png(file_out("figures/biomass-range-compare.png"),
         width = 7, height = 7, units = "in", res = 300)
-    par(mfrow = c(2, 2))
-    plot(mad_range[[1]], main = "Madingley min")
-    plot(mad_range[[2]], main = "Madingley max")
-    plot(vsem_range[[1]], main = "VSEM min")
-    plot(vsem_range[[2]], main = "VSEM max")
+    plot(distribution_raster, main = "Fraction distribution overlap")
     dev.off()
   },
-  overlapplot = {
-    mad_vsem_overlap <- (mad_range[["range_max"]] > vsem_range[["range_min"]]) &
-      (mad_range[["range_min"]] < vsem_range[["range_max"]])
-    png(file_out("figures/biomass-range-intersect.png"),
-        width = 5, height = 5, units = "in", res = 300)
-    plot(mad_vsem_overlap)
+  mad_veg_compare = {
+    png(file_out("figures/mad-veg-compare.png"),
+        width = 10, height = 7, units = "in", res = 300)
+    s <- raster::stack(list(
+      Madingley = mad_stats[["Mean"]],
+      MstMIP = mstmip_stats[[1]]
+    ))
+    plot(s)
     dev.off()
   }
 )

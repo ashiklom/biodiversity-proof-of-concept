@@ -13,8 +13,13 @@ madingley_get_biomass <- function(ncfile, outfile) {
   lon <- ncdf4::ncvar_get(nc, "Longitude")
   time <- ncdf4::ncvar_get(nc, "Time step")
   tstart <- which(time > 800)[1]
-  biomass <- ncdf4::ncvar_get(nc, "autotrophbiomass density",
-                              start = c(tstart, 1, 1))
+  biomass_raw <- ncdf4::ncvar_get(nc, "autotrophbiomass density",
+                                  start = c(tstart, 1, 1))
+  # Madingley units are log ([g km-2] + 1)
+  biomass_leaf <- udunits2::ud.convert(exp(biomass_raw) - 1, "g km-2", "kg m-2")
+  # Foliar biomass is ~10% of total AGB
+  # C.f. Bond-Lamberty et al. 2002
+  biomass <- 10 * biomass_leaf
   ncdf4::nc_close(nc)
   biomass_r <- makeraster(biomass, lat, lon)
   raster::writeRaster(biomass_r, outfile, overwrite = TRUE)
@@ -111,10 +116,16 @@ vsem_grid_ensemble <- function(merra_par, vsem_Cv0 = NULL, nens = 100) {
 distribution_overlap <- function(r1, r2) {
   stopifnot(nrow(r1) == nrow(r2),
             ncol(r1) == ncol(r2))
-  r1_mean <- calc(r1, mean)
-  r1_sd <- calc(r1, sd)
-  r2_mean <- mean(r2)
-  r2_sd <- calc(r2, sd)
+  r1_mean <- r1[[1]]
+  r1_sd <- r1[[2]]
+  r2_mean <- r2[[1]]
+  r2_sd <- r2[[2]]
+
+  # This is currently numerical. But it can be done analytically, because these
+  # are both normal.
+  # Prec(x) = function(x) 1 / var(x)
+  # Mean = (Prec1 * Mean1 + Prec2 * Mean2) / (Prec1 + Prec2)
+  # Var = 1/(Prec1 + Prec2)
 
   f <- function(x, m1, s1, m2, s2) {
     f1 <- dnorm(x, m1, s1)
@@ -123,12 +134,18 @@ distribution_overlap <- function(r1, r2) {
   }
 
   f_int <- function(VM, VS, MM, MS) {
-    integrate(f, -Inf, Inf, VM, VS, MM, MS)$value
+    tryCatch(
+      integrate(f, -Inf, Inf, VM, VS, MM, MS)$value,
+      error = function(e) {
+        warning(conditionMessage(e))
+        return(NA)
+      }
+    )
   }
 
   intmat <- matrix(numeric(), nrow(r1), ncol(r1))
-  for (i in 1:nrow(r1)) {
-    for (j in 1:ncol(r1)) {
+  for (i in seq_len(nrow(r1))) {
+    for (j in seq_len(ncol(r1))) {
       if (is.na(r1_mean[i,j]) | is.na(r2_mean[i,j])) next
       intmat[i,j] <- f_int(r1_mean[i,j], r1_sd[i,j],
                            r2_mean[i,j], r2_sd[i,j])

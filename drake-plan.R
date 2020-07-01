@@ -62,5 +62,10 @@ plan <- drake_plan(
       biomass_likelihood,
       biomass = biomass_joint_raster
     )
-  )
+  ),
+  moose_density = {
+    # Units are individuals per sq km
+    moose <- sf::read_sf(file_in("data/MooseDensity2010/MooseDensity2010.shp"))
+    rasterize(moose, biomass_joint_raster, field = "Density")
+  }
 )

@@ -53,5 +53,14 @@ plan <- drake_plan(
     ))
     plot(s)
     dev.off()
-  }
+  },
+  biomass_joint_raster = joint_raster(mstmip_stats, mad_stats),
+  mad_likelihoods = tibble::tibble(
+    file = file_in(!!outfiles),
+    biomass_likelihood = purrr::map_dbl(
+      file,
+      biomass_likelihood,
+      biomass = biomass_joint_raster
+    )
+  )
 )

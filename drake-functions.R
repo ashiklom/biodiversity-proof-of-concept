@@ -155,3 +155,26 @@ distribution_overlap <- function(r1, r2) {
   intrast[] <- intmat
   intrast
 }
+
+joint_raster <- function(r1, r2) {
+  stopifnot(nrow(r1) == nrow(r2), ncol(r1) == ncol(r2))
+  m1 <- r1[[1]]
+  s1 <- r1[[2]]
+  m2 <- r2[[1]]
+  s2 <- r2[[2]]
+  p1 <- s1^-2
+  p2 <- s2^-2
+  pz <- p1 + p2
+  mz <- (m1 * p1 + m2 * p2) / pz
+  sz <- pz^-0.5
+  raster::stack(list(Mean = mz, SD = sz))
+}
+
+biomass_likelihood <- function(f, biomass) {
+  r <- raster::raster(f)
+  rsub <- raster::resample(r, biomass)
+  pr <- rsub
+  pr[] <- dnorm(rsub[], biomass[["Mean"]][], biomass[["SD"]][], log = TRUE)
+  pr[pr < quantile(pr, 0.05)] <- NA
+  sum(pr[], na.rm = TRUE)
+}

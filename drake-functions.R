@@ -170,11 +170,28 @@ joint_raster <- function(r1, r2) {
   raster::stack(list(Mean = mz, SD = sz))
 }
 
-biomass_likelihood <- function(f, biomass) {
-  r <- raster::raster(f)
-  rsub <- raster::resample(r, biomass)
+raster_likelihood <- function(r, target) {
+  rsub <- raster::resample(r, target)
   pr <- rsub
-  pr[] <- dnorm(rsub[], biomass[["Mean"]][], biomass[["SD"]][], log = TRUE)
+  pr[] <- dnorm(rsub[], target[["Mean"]][], target[["SD"]][], log = TRUE)
   pr[pr < quantile(pr, 0.05)] <- NA
   sum(pr[], na.rm = TRUE)
+}
+
+madingley_moose_raster <- function(f, base) {
+  .datatable.aware <- TRUE #nolint
+  # Area of a 1 degree grid cell
+  # HACK: Assuming it's constant, but should really vary with latitude
+  ft2km <- 30.48 / (100 * 1000)
+  latsize <- 364000 * ft2km
+  lonsize <- 288200 * ft2km
+  mad_moose <- data.table::fread(f)
+  mad_moose[, degree_area := latsize * lonsize]
+  # BodyMass is in g -- here, restrict to mass > 300 kg
+  dat <- mad_moose[IndividualBodyMass > 300000,
+                     .(density = sum(CohortAbundance) / degree_area),
+                     .(Latitude, Longitude)]
+  mad_moose_sf <- sf::st_as_sf(dat, coords = c("Longitude", "Latitude"),
+                               crs = sf::st_crs(4326))
+  rasterize(mad_moose_sf, base, field = "density")
 }

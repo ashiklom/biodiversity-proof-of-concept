@@ -239,3 +239,47 @@ plot(i, normalize(x), type = 'l')
 lines(i, normalize(y), col = "red")
 lines(i, normalize(x * y), col = "blue")
 lines(i, normalize(z), col = "green4")
+
+##################################################
+library(raster)
+library(tmap)
+ft2km <- 30.48 / (100 * 1000)
+latsize <- 364000 * ft2km
+lonsize <- 288200 * ft2km
+degree_area <- latsize * lonsize
+mad_moose_1 <- data.table::fread("data/madingley/MooseCohorts_tstep1259_1.csv")
+
+hist(mad_moose_1[["IndividualBodyMass"]])
+
+dat <- mad_moose_1[IndividualBodyMass > 300000,
+                   .(density = sum(CohortAbundance) / degree_area),
+                   .(Latitude, Longitude)]
+mad_moose_sf <- sf::st_as_sf(dat, coords = c("Longitude", "Latitude"),
+                             crs = sf::st_crs(4326))
+mad_moose_r <- rasterize(mad_moose_sf, moose_density, field = "density")
+plot(mad_moose_r)
+
+plot(moose_density)
+
+nc <- ncdf4::nc_open("data/madingley/GridOutputs_SSPHistoric_1.nc")
+
+data(World)
+usca <- subset(World, iso_a3 %in% c("USA", "CAN"))
+
+hist(mad_moose_r)
+
+mm <- mad_moose_r
+mm[mm > 50] <- 50
+tm_shape(mm) +
+  tm_raster(style = "cont",
+            breaks = c(0, 1, 2, 3, 5, 10, 20, 30, 40, 50)) +
+  tm_shape(usca) +
+  tm_borders() +
+  tm_legend(position = c("left", "bottom"))
+
+hist(moose$Density)
+
+plot(mad_moose_stats)
+plot(moose_density)
+
+l <- as.list(mad_moose_all)

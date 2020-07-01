@@ -58,14 +58,36 @@ plan <- drake_plan(
   mad_likelihoods = tibble::tibble(
     file = file_in(!!outfiles),
     biomass_likelihood = purrr::map_dbl(
-      file,
-      biomass_likelihood,
-      biomass = biomass_joint_raster
+      purrr::map(file, raster::raster),
+      raster_likelihood,
+      target = biomass_joint_raster
+    ),
+    moose_likelihood = purrr::map_dbl(
+      as.list(mad_moose_all),
+      raster_likelihood,
+      target = moose_joint_raster
     )
   ),
   moose_density = {
     # Units are individuals per sq km
     moose <- sf::read_sf(file_in("data/MooseDensity2010/MooseDensity2010.shp"))
-    rasterize(moose, biomass_joint_raster, field = "Density")
-  }
+    rasterize(moose, biomass_joint_raster, field = "Density", fun = mean)
+  },
+  moose_stats = stack(list(
+    Mean = moose_density,
+    # HACK: Assume SD = 10% of mean (so CI is +/- 20%)
+    SD = moose_density * 0.1
+  )),
+  mad_moose_all = {
+    madfiles <- file_in(!!fs::dir_ls("data/madingley/", glob = "*Moose*.csv"))
+    stack(lapply(madfiles, madingley_moose_raster, base = mad_stats))
+  },
+  mad_moose_stats = stack(list(
+    Mean = mean(mad_moose_all),
+    SD = calc(mad_moose_all, sd)
+  )),
+  moose_overlap_probability = distribution_overlap(
+    moose_stats, mad_moose_stats
+  ),
+  moose_joint_raster = joint_raster(moose_stats, mad_moose_stats)
 )

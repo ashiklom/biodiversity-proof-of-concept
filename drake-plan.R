@@ -1,5 +1,8 @@
 library(drake)
 library(raster)
+library(tmap)
+library(ggplot2)
+library(magrittr, include.only = "%>%")
 
 ncfiles <- list.files("data/madingley", "*.nc$", full.names = TRUE)
 nc_id <- regmatches(ncfiles, regexpr("([[:digit:]])(?=.nc)", ncfiles,
@@ -89,5 +92,120 @@ plan <- drake_plan(
   moose_overlap_probability = distribution_overlap(
     moose_stats, mad_moose_stats
   ),
-  moose_joint_raster = joint_raster(moose_stats, mad_moose_stats)
+  moose_joint_raster = joint_raster(moose_stats, mad_moose_stats),
+  biomass_plot = {
+    land <- rnaturalearth::ne_countries(
+      continent = "North America",
+      scale = "medium"
+    )
+    land_shape <- tm_shape(land) + tm_borders(lwd = 2)
+    brks <- seq(0, 20, 5)
+    biomass_layer <- tm_raster(
+      style = "cont",
+      palette = "Greens",
+      title = expression("Mean biomass" ~ (kg ~ m^{-2})),
+      breaks = brks
+    )
+    p1 <- tm_shape(mstmip_stats[[1]]) +
+      biomass_layer +
+      land_shape +
+      tm_layout(
+        title = "MstMIP",
+        title.position = c("left", "bottom"),
+        legend.position = c("left", "bottom")
+      )
+    p2 <- tm_shape(mad_stats[["Mean"]]) +
+      biomass_layer +
+      land_shape +
+      tm_layout(
+        title = "Madingley",
+        title.position = c("left", "bottom"),
+        legend.position = c("left", "bottom")
+      )
+    p3 <- tm_shape(distribution_raster) +
+      tm_raster(
+        style = "cont",
+        palette = "BuPu",
+        title = "Probability (0-1)"
+      ) +
+      land_shape +
+      tm_layout(
+        title = "Biomass overlap",
+        title.position = c("left", "bottom"),
+        legend.position = c("left", "bottom")
+      )
+    tmap_save(
+      tmap_arrange(p1, p2, p3, ncol = 1),
+      file_out("figures/biomass-compare.png"),
+      width = 7.3, height = 9, units = "in", dpi = 300
+    )
+  },
+  moose_plot = {
+    land <- rnaturalearth::ne_countries(
+      continent = "North America",
+      scale = "medium"
+    )
+    land_shape <- tm_shape(land) + tm_borders(lwd = 2)
+    density_layer <- tm_raster(
+      style = "cont",
+      palette = "YlOrRd",
+      title = expression("Moose density" ~ (individuals ~ km^{-2}))
+    )
+    p1 <- tm_shape(moose_stats[["Mean"]]) +
+      density_layer +
+      land_shape +
+      tm_layout(
+        title = "Observed",
+        title.position = c("left", "bottom"),
+        legend.position = c("left", "bottom")
+      )
+    p2 <- tm_shape(mad_moose_stats[["Mean"]]) +
+      density_layer +
+      land_shape +
+      tm_layout(
+        title = "Madingley",
+        title.position = c("left", "bottom"),
+        legend.position = c("left", "bottom")
+      )
+    p3 <- tm_shape(moose_overlap_probability) +
+      tm_raster(
+        style = "cont",
+        palette = "BuPu",
+        title = "Probability (0-1)"
+      ) +
+      land_shape +
+      tm_layout(
+        title = "Moose density overlap",
+        title.position = c("left", "bottom"),
+        legend.position = c("left", "bottom")
+      )
+    tmap_save(
+      tmap_arrange(p1, p2, p3, ncol = 1),
+      file_out("figures/moose-compare.png"),
+      width = 7.3, height = 9, units = "in", dpi = 300
+    )
+  },
+  mad_likelihood_plot = {
+    dat <- mad_likelihoods
+    dat$ensemble <- regmatches(
+      basename(dat$file),
+      regexpr("[[:digit:]]+", basename(dat$file))
+    )
+    plt <- ggplot(dat) +
+      aes(x = biomass_likelihood, y = moose_likelihood,
+          label = ensemble) +
+      geom_label() +
+      ## geom_segment(aes(x = -7350, xend = -7200,
+      ##                  y = -6.5e9, yend = -5.5e9),
+      ##              arrow = arrow(ends = "both")) +
+      ## geom_text(aes(x = -7200, y = -5.5e9, label = "More likely"),
+      ##           nudge_x = -50) +
+      ## geom_text(aes(x = -7350, y = -6.5e9, label = "Less likely"),
+      ##           nudge_x = 50) +
+      theme_bw() +
+      labs(x = "Biomass log(likelihood)",
+           y = "Moose density log(likelihood)")
+    ggsave(file_out("figures/madingley-likelihood.png"), plt,
+           width = 5.62, height = 4.63, units = "in", dpi = 300)
+  }
 )

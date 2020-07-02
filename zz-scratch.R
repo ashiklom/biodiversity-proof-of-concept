@@ -283,3 +283,28 @@ plot(mad_moose_stats)
 plot(moose_density)
 
 l <- as.list(mad_moose_all)
+
+##################################################
+library(tmap)
+library(ggplot2)
+
+ggplot(mad_likelihoods) +
+  aes(x = biomass_likelihood, y = moose_likelihood) +
+  geom_label(aes(label = basename(file)))
+
+wts <- mad_likelihoods %>%
+  dplyr::mutate(logwt = biomass_likelihood + moose_likelihood/10^6,
+                wt = exp(logwt),
+                normwt = wt / sum(wt))
+
+mad_biomass_rmean <- weighted.mean(mad_biomass, wts$normwt)
+mad_biomass_ss <- (mad_biomass - mad_biomass_rmean)^2
+mad_biomass_rsd <- sqrt(sum(mad_biomass_ss * wts$normwt))
+
+mad_biomass_stats_resamp = raster::stack(list(
+  Mean = mad_biomass_rmean,
+  SD = mad_biomass_rsd
+))
+
+sd_reduction <- 1 - mad_biomass_stats_resamp[["SD"]] / mad_stats[["SD"]]
+plot(sd_reduction)

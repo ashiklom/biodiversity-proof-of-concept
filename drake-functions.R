@@ -170,12 +170,12 @@ joint_raster <- function(r1, r2) {
   raster::stack(list(Mean = mz, SD = sz))
 }
 
-raster_likelihood <- function(r, target) {
+raster_likelihood <- function(r, target, f = mean) {
   rsub <- raster::resample(r, target)
   pr <- rsub
   pr[] <- dnorm(rsub[], target[["Mean"]][], target[["SD"]][], log = TRUE)
   pr[pr < quantile(pr, 0.05)] <- NA
-  sum(pr[], na.rm = TRUE)
+  f(pr[], na.rm = TRUE)
 }
 
 madingley_moose_raster <- function(f, base) {

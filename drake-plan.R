@@ -94,11 +94,7 @@ plan <- drake_plan(
   ),
   moose_joint_raster = joint_raster(moose_stats, mad_moose_stats),
   biomass_plot = {
-    land <- rnaturalearth::ne_countries(
-      continent = "North America",
-      scale = "medium"
-    )
-    land_shape <- tm_shape(land) + tm_borders(lwd = 2)
+    land <- land_shape()
     brks <- seq(0, 20, 5)
     biomass_layer <- tm_raster(
       style = "cont",
@@ -108,7 +104,7 @@ plan <- drake_plan(
     )
     p1 <- tm_shape(mstmip_stats[[1]]) +
       biomass_layer +
-      land_shape +
+      land +
       tm_layout(
         title = "MstMIP",
         title.position = c("left", "bottom"),
@@ -116,7 +112,7 @@ plan <- drake_plan(
       )
     p2 <- tm_shape(mad_stats[["Mean"]]) +
       biomass_layer +
-      land_shape +
+      land +
       tm_layout(
         title = "Madingley",
         title.position = c("left", "bottom"),
@@ -128,7 +124,7 @@ plan <- drake_plan(
         palette = "BuPu",
         title = "Probability (0-1)"
       ) +
-      land_shape +
+      land +
       tm_layout(
         title = "Biomass overlap",
         title.position = c("left", "bottom"),
@@ -145,15 +141,16 @@ plan <- drake_plan(
       continent = "North America",
       scale = "medium"
     )
-    land_shape <- tm_shape(land) + tm_borders(lwd = 2)
+    land <- land_shape()
     density_layer <- tm_raster(
       style = "cont",
       palette = "YlOrRd",
       title = expression("Moose density" ~ (individuals ~ km^{-2}))
+      ## breaks = brks
     )
     p1 <- tm_shape(moose_stats[["Mean"]]) +
       density_layer +
-      land_shape +
+      land +
       tm_layout(
         title = "Observed",
         title.position = c("left", "bottom"),
@@ -161,7 +158,7 @@ plan <- drake_plan(
       )
     p2 <- tm_shape(mad_moose_stats[["Mean"]]) +
       density_layer +
-      land_shape +
+      land +
       tm_layout(
         title = "Madingley",
         title.position = c("left", "bottom"),
@@ -173,7 +170,7 @@ plan <- drake_plan(
         palette = "BuPu",
         title = "Probability (0-1)"
       ) +
-      land_shape +
+      land +
       tm_layout(
         title = "Moose density overlap",
         title.position = c("left", "bottom"),

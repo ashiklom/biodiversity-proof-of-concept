@@ -195,3 +195,21 @@ madingley_moose_raster <- function(f, base) {
                                crs = sf::st_crs(4326))
   rasterize(mad_moose_sf, base, field = "density")
 }
+
+land_shape <- function() {
+  na <- rnaturalearth::ne_countries(
+    continent = "North America",
+    scale = "medium",
+    returnclass = "sf"
+  )
+  lakes <- rnaturalearth::ne_load(
+    scale = 50,
+    type = "lakes",
+    category = "physical",
+    destdir = "data/naturalearth/ne_50m_lakes/",
+    returnclass = "sf"
+  ) %>%
+    sf::st_crop(na)
+  tm_shape(na) + tm_borders(lwd = 1) +
+    tm_shape(lakes) + tm_borders(lwd = 1)
+}

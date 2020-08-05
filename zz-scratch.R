@@ -308,3 +308,138 @@ mad_biomass_stats_resamp = raster::stack(list(
 
 sd_reduction <- 1 - mad_biomass_stats_resamp[["SD"]] / mad_stats[["SD"]]
 plot(sd_reduction)
+
+f <- "data/madingley/MooseCohorts_tstep1259_1.csv"
+
+##################################################
+# The implied relationships in Madingley between moose density and plant biomass
+loadd(mad_moose_all)
+loadd(mad_biomass)
+
+par(mfrow = c(3, 2))
+for (i in 1:6) {
+  m <- c(raster::getValues(mad_moose_all, i))
+  b <- c(raster::getValues(mad_biomass, i))
+  ## plot(m, b, xlim = c(0, 20))
+  fit <- lm(log10(m) ~ log10(b))
+  title <- sprintf("y = %.3fx + %.3f", fit$coefficients[2], fit$coefficients[1])
+  plot(log10(b), log10(m), main = title)
+  abline(fit, col = "red")
+}
+
+##################################################
+loadd(mad_moose_all)
+
+pl <- list()
+for (i in 1:6) {
+  pl[[i]] <- tm_shape(mad_moose_all[[i]]) +
+    tm_raster(style = "cont",
+              palette = "YlOrRd") +
+    land_shape() +
+    tm_layout(title.position = c("left", "bottom"),
+              legend.position = c("left", "bottom"))
+}
+do.call(tmap_arrange, pl)
+
+##################################################
+pl <- list()
+land <- land_shape()
+for (i in 1:6) {
+  f <- sprintf("data/madingley/MooseCohorts_tstep1259_%d.csv", i)
+  dt <- data.table::fread(f)
+  dat <- dt[IndividualBodyMass == AdultMass & AdultMass > 400000,
+            .(N = sum(CohortAbundance)),
+            .(Latitude, Longitude)]
+  ## dat <- dt[, .(N = sum(IndividualBodyMass * CohortAbundance)/1e9),
+  ##           .(Latitude, Longitude)]
+  dat_sf <- sf::st_as_sf(dat, coords = c("Longitude", "Latitude"),
+                         crs = sf::st_crs(4326))
+  pl[[i]] <-
+    tm_shape(sf::st_crop(dat_sf, mad_moose_all)) +
+    tm_dots(size = 0.4, col = "N", shape = 15, style = "cont") +
+    ## tm_dots(size = 0.4, col = "N", shape = 15,
+    ##         breaks = seq(0, 2000, 400),
+    ##         title = "Animal biomass") +
+    land +
+    tm_layout(title = sprintf("Madingley %d", i),
+              title.position = c("left", "bottom"))
+}
+do.call(tmap_arrange, pl)
+
+##################################################
+loadd(mad_biomass_all)
+loadd(mad_stats)
+loadd(mstmip_stats)
+
+mad <- mad_stats[["Mean"]][]
+mstmip <- mstmip_stats[[1]][]
+cor(mad, mstmip, use = "pairwise.complete.obs", method = "spearman")
+plot(mstmip, mad)
+abline(a = 0, b = 1, lty = "dashed")
+
+loadd(moose_stats)
+loadd(mad_moose_stats)
+
+normalize <- function(x) (x - mean(x, na.rm = TRUE)) / sd(x, na.rm = TRUE)
+madm <- mad_moose_stats[["Mean"]][]
+obsm <- moose_stats[["Mean"]][]
+cor(madm, obsm, use = "pairwise.complete.obs", method = "spearman")
+plot(normalize(madm), normalize(obsm))
+abline(a = 0, b = 1, lty = "dashed")
+
+# Compare ensembles according to Spearman rank coefficient
+loadd(mad_moose_all)
+for (i in 1:6) {
+  mad <- mad_moose_all[[i]][]
+  cr <- cor(mad, obsm, use = "pairwise.complete.obs",
+            method = "spearman")
+  print(sprintf("%d: Cor %.3f", i, cr))
+}
+
+##################################################
+loadd(moose_stats)
+loadd(mad_moose_stats)
+loadd(moose_overlap_probability)
+loadd(mad_moose_all)
+loadd(moose_joint_raster)
+
+ibest <- which.max(moose_overlap_probability)
+
+obs_moose_mean <- moose_stats[["Mean"]][ibest]
+obs_moose_sd <- moose_stats[["SD"]][ibest]
+mad_moose_mean <- mad_moose_stats[["Mean"]][ibest]
+mad_moose_sd <- mad_moose_stats[["SD"]][ibest]
+assim_moose_mean <- moose_joint_raster[["Mean"]][ibest]
+assim_moose_sd <- moose_joint_raster[["SD"]][ibest]
+
+mad_best_vals <- vapply(
+  1:6,
+  function(x) mad_moose_all[[x]][ibest],
+  numeric(1)
+)
+
+
+# Vegetation biomass informed by Madingley
+loadd(mad_biomass)
+loadd(mad_stats)
+loadd(mstmip_stats)
+loadd(biomass_joint_raster)
+
+ibest
+coords <- raster::coordinates(mad_biomass)
+coords_best <- coords[ibest,]
+land <- land_shape()
+coords_best_shp <- sf::st_sfc(sf::st_point(coords_best), crs = 4326)
+
+density_layer <- tm_raster(
+  style = "cont",
+  palette = "YlOrRd",
+  title = expression("Moose density" ~ (individuals ~ km^{-2}))
+  ## breaks = seq(0, 5, 1)
+)
+
+tm_shape(moose_stats[["Mean"]]) +
+  density_layer +
+  land +
+  tm_shape(coords_best_shp) +
+  tm_dots(shape = 13, size = 2, border.lwd = 3)

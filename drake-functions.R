@@ -188,7 +188,9 @@ madingley_moose_raster <- function(f, base) {
   mad_moose <- data.table::fread(f)
   mad_moose[, degree_area := latsize * lonsize]
   # BodyMass is in g -- here, restrict to mass > 300 kg
-  dat <- mad_moose[IndividualBodyMass > 300000,
+  # Individual biomass == Adult biomass
+  dat <- mad_moose[IndividualBodyMass == AdultMass &
+                     AdultMass > 400000,
                      .(density = sum(CohortAbundance) / degree_area),
                      .(Latitude, Longitude)]
   mad_moose_sf <- sf::st_as_sf(dat, coords = c("Longitude", "Latitude"),

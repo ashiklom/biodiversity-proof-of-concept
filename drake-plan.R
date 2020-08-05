@@ -93,6 +93,7 @@ plan <- drake_plan(
     moose_stats, mad_moose_stats
   ),
   moose_joint_raster = joint_raster(moose_stats, mad_moose_stats),
+  ibest_moose = which.max(moose_overlap_probability),
   biomass_plot = {
     land <- land_shape()
     brks <- seq(0, 20, 5)
@@ -137,17 +138,15 @@ plan <- drake_plan(
     )
   },
   moose_plot = {
-    land <- rnaturalearth::ne_countries(
-      continent = "North America",
-      scale = "medium"
-    )
     land <- land_shape()
     density_layer <- tm_raster(
       style = "cont",
       palette = "YlOrRd",
       title = expression("Moose density" ~ (individuals ~ km^{-2}))
-      ## breaks = brks
+      ## breaks = seq(0, 5, 1)
     )
+    coords_best <- raster::coordinates(moose_stats)[ibest_moose, ]
+    coords_best_shp <- sf::st_sfc(sf::st_point(coords_best), crs = 4326)
     p1 <- tm_shape(moose_stats[["Mean"]]) +
       density_layer +
       land +
@@ -171,6 +170,8 @@ plan <- drake_plan(
         title = "Probability (0-1)"
       ) +
       land +
+      tm_shape(coords_best_shp) +
+      tm_dots(shape = 13, size = 2, border.lwd = 3) +
       tm_layout(
         title = "Moose density overlap",
         title.position = c("left", "bottom"),
@@ -192,17 +193,108 @@ plan <- drake_plan(
       aes(x = biomass_likelihood, y = moose_likelihood,
           label = ensemble) +
       geom_label() +
-      ## geom_segment(aes(x = -7350, xend = -7200,
-      ##                  y = -6.5e9, yend = -5.5e9),
-      ##              arrow = arrow(ends = "both")) +
-      ## geom_text(aes(x = -7200, y = -5.5e9, label = "More likely"),
-      ##           nudge_x = -50) +
-      ## geom_text(aes(x = -7350, y = -6.5e9, label = "Less likely"),
-      ##           nudge_x = 50) +
       theme_bw() +
       labs(x = "Biomass log(likelihood)",
            y = "Moose density log(likelihood)")
     ggsave(file_out("figures/madingley-likelihood.png"), plt,
            width = 5.62, height = 4.63, units = "in", dpi = 300)
+  },
+  joint_constraint = {
+    dnorm0 <- function(x, ...) {
+      x[x < 0] <- 0
+      dnorm(x, ...)
+    }
+    ibest <- ibest_moose
+    obs_moose_mean <- moose_stats[["Mean"]][ibest]
+    obs_moose_sd <- moose_stats[["SD"]][ibest]
+    mad_moose_mean <- mad_moose_stats[["Mean"]][ibest]
+    mad_moose_sd <- mad_moose_stats[["SD"]][ibest]
+    mad_moose_vals <- vapply(1:6, function(x) mad_moose_all[[x]][ibest], numeric(1))
+    assim_moose_mean <- moose_joint_raster[["Mean"]][ibest]
+    assim_moose_sd <- moose_joint_raster[["SD"]][ibest]
+    obs_veg_mean <- mstmip_stats[[1]][ibest]
+    obs_veg_sd <- mstmip_stats[[2]][ibest]
+    mad_veg_mean <- mad_stats[["Mean"]][ibest]
+    mad_veg_sd <- mad_stats[["SD"]][ibest]
+    mad_veg_all <- vapply(1:6, function(x) mad_biomass[[x]][ibest], numeric(1))
+    assim_veg_mean <- biomass_joint_raster[["Mean"]][ibest]
+    assim_veg_sd <- biomass_joint_raster[["SD"]][ibest]
+
+    png(file_out("figures/joint-distributions.png"),
+        width = 14, height = 7,
+        units = "in", res = 300)
+    par(mfrow = c(1, 2))
+    curve(dnorm0(x, obs_moose_mean, obs_moose_sd), 0, 3,
+          n = 1000,
+          xlab = expression("Moose density" ~ (km^-2)),
+          ylab = "Probability",
+          main = "Moose density")
+    curve(dnorm0(x, mad_moose_mean, mad_moose_sd), 0, 3,
+          n = 1000,
+          add = TRUE, col = "red")
+    curve(dnorm0(x, assim_moose_mean, assim_moose_sd), 0, 3,
+          n = 1000,
+          add = TRUE, col = "green")
+    rug(mad_moose_vals, col = "red")
+    text(mad_moose_vals, 0.1, seq_along(mad_moose_vals))
+    legend("topright", c("Observed", "Madingley", "Joint"),
+           lty = 1, col = c("black", "red", "green"))
+    curve(dnorm0(x, obs_veg_mean, obs_veg_sd), 0, 15,
+          n = 1000, col = "black",
+          main = "Vegetation biomass",
+          xlab = expression("Vegetation biomass" ~ (kg ~ m^-2)),
+          ylab = "Probability",
+          ylim = c(0, 0.4))
+    curve(dnorm0(x, mad_veg_mean, mad_veg_sd), 0, 15,
+          n = 1000, col = "red", add = TRUE)
+    rug(mad_veg_all, col = "red")
+    text(mad_veg_all, 0.01, seq_along(mad_veg_all))
+    curve(dnorm0(x, assim_veg_mean, assim_veg_sd), 0, 15,
+          n = 1000, col = "green", add = TRUE)
+    legend("topright", c("MstMIP", "Madingley", "Joint"),
+           lty = 1, col = c("black", "red", "green"))
+    dev.off()
+
+    xrange <- c(0, 3)
+    yrange <- c(0, 15)
+    rx <- seq(xrange[1], xrange[2], length.out = 100)
+    ry <- seq(yrange[1], yrange[2], length.out = 100)
+    px <- dnorm0(rx, assim_moose_mean, assim_moose_sd)
+    py <- dnorm0(ry, assim_veg_mean, assim_veg_sd)
+    pxy <- px %*% t(py)
+    wts_u <- dnorm0(mad_moose_vals, assim_moose_mean, assim_moose_sd) *
+      dnorm0(mad_veg_all, assim_veg_mean, assim_veg_sd)
+    wts <- wts_u / sum(wts_u)
+    mad_moose_wtd_mean <- weighted.mean(mad_moose_vals, wts)
+    mad_moose_wtd_sd <- sqrt(sum(wts * (mad_moose_vals - mad_moose_wtd_mean)^2))
+    mad_veg_wtd_mean <- weighted.mean(mad_veg_all, wts)
+    mad_veg_wtd_sd <- sqrt(sum(wts * (mad_veg_all - mad_veg_wtd_mean)^2))
+    pxw <- dnorm0(rx, mad_moose_wtd_mean, mad_moose_wtd_sd)
+    pyw <- dnorm0(ry, mad_veg_wtd_mean, mad_veg_wtd_sd)
+
+    png(file_out("figures/joint-constraint.png"),
+        width = 7.5, height = 6.5,
+        units = "in", res = 300)
+    layout(matrix(c(2, 1, 0, 3), 2), c(4, 1), c(1, 4))
+    par(mar = c(4, 4, 1, 1), mgp = c(2.5, 1, 0))
+    plot(0, 0, type = "n",
+         xlab = expression("Moose density" ~ (km^-2)),
+         ylab = expression("Vegetation biomass" ~ (kg ~ m^-2)),
+         xlim = xrange, ylim = yrange)
+    image(rx, ry, pxy, add = TRUE)
+    points(mad_moose_vals, mad_veg_all, pch = 19)
+    text(mad_moose_vals, mad_veg_all, seq_along(mad_moose_vals),
+         pos = 3)
+    par(mar = c(1, 4, 0, 0), xpd = TRUE)
+    plot(rx, px, type = "l", axes = FALSE, xlab = "", ylab = "",
+         ylim = range(px, pxw), col = "green")
+    lines(rx, pxw, col = "blue")
+    legend("right", c("Univariate constraint", "Multivariate constraint"),
+           lty = 1, col = c("green", "blue"), bty = "n")
+    par(mar = c(4, 1, 0, 0), xpd = FALSE)
+    plot(py, ry, type = "l", axes = FALSE, xlab = "", ylab = "",
+         xlim = range(py, pyw), col = "green")
+    lines(pyw, ry, col = "blue")
+    dev.off()
   }
 )

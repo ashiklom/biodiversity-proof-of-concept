@@ -83,7 +83,8 @@ plan <- drake_plan(
   )),
   mad_moose_all = {
     madfiles <- file_in(!!fs::dir_ls("data/madingley/", glob = "*Moose*.csv"))
-    stack(lapply(madfiles, madingley_moose_raster, base = mad_stats))
+    s <- stack(lapply(madfiles, madingley_moose_raster, base = mad_stats))
+    s / raster::area(s)
   },
   mad_moose_stats = stack(list(
     Mean = mean(mad_moose_all),
@@ -257,13 +258,13 @@ plan <- drake_plan(
 
     xrange <- c(0, 3)
     yrange <- c(0, 15)
-    rx <- seq(xrange[1], xrange[2], length.out = 100)
-    ry <- seq(yrange[1], yrange[2], length.out = 100)
-    px <- dnorm0(rx, assim_moose_mean, assim_moose_sd)
-    py <- dnorm0(ry, assim_veg_mean, assim_veg_sd)
+    rx <- seq(xrange[1], xrange[2], length.out = 300)
+    ry <- seq(yrange[1], yrange[2], length.out = 300)
+    px <- dnorm0(rx, obs_moose_mean, obs_moose_sd)
+    py <- dnorm0(ry, obs_veg_mean, obs_veg_sd)
     pxy <- px %*% t(py)
-    wts_u <- dnorm0(mad_moose_vals, assim_moose_mean, assim_moose_sd) *
-      dnorm0(mad_veg_all, assim_veg_mean, assim_veg_sd)
+    wts_u <- dnorm0(mad_moose_vals, obs_moose_mean, obs_moose_sd) *
+      dnorm0(mad_veg_all, obs_veg_mean, obs_veg_sd)
     wts <- wts_u / sum(wts_u)
     mad_moose_wtd_mean <- weighted.mean(mad_moose_vals, wts)
     mad_moose_wtd_sd <- sqrt(sum(wts * (mad_moose_vals - mad_moose_wtd_mean)^2))
@@ -287,13 +288,20 @@ plan <- drake_plan(
          pos = 3)
     par(mar = c(1, 4, 0, 0), xpd = TRUE)
     plot(rx, px, type = "l", axes = FALSE, xlab = "", ylab = "",
-         ylim = range(px, pxw), col = "green")
+         ylim = range(px, pxw), col = "black")
+    lines(rx, dnorm0(rx, assim_moose_mean, assim_moose_sd),
+          col = "green", lty = "dashed")
     lines(rx, pxw, col = "blue")
-    legend("right", c("Univariate constraint", "Multivariate constraint"),
-           lty = 1, col = c("green", "blue"), bty = "n")
+    legend("right", c("Observed/MstMIP",
+                      "Univariate constraint",
+                      "Multivariate constraint"),
+           lty = c("solid", "dashed", "solid"),
+           col = c("black", "green", "blue"), bty = "n")
     par(mar = c(4, 1, 0, 0), xpd = FALSE)
     plot(py, ry, type = "l", axes = FALSE, xlab = "", ylab = "",
-         xlim = range(py, pyw), col = "green")
+         xlim = range(py, pyw), col = "black")
+    lines(dnorm0(ry, assim_veg_mean, assim_veg_sd), ry,
+          col = "green", lty = "dashed")
     lines(pyw, ry, col = "blue")
     dev.off()
   }

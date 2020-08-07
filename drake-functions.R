@@ -34,14 +34,6 @@ rnorm_gt0 <- function(...) {
   x
 }
 
-VSEM_random <- function(PAR, Cv0 = 3) {
-  # TODO: Need to save the parameter values
-  list(
-    vsem = BayesianTools::VSEM(pars, PAR = PAR),
-    params = pars
-  )
-}
-
 prepare_merra_par <- function(merrafiles) {
   # Country boundaries polygon
   land <- rnaturalearth::ne_countries(
@@ -65,52 +57,6 @@ prepare_merra_par <- function(merrafiles) {
   sf::st_crs(s) <- sf::st_crs(4326)
   # Subset to just the North America land
   sf::st_crop(s, land_sub)
-}
-
-vsem_grid_ensemble <- function(merra_par, vsem_Cv0 = NULL, nens = 100) {
-  # HACK: X vectors for interpolating from monthly to daily
-  x1 <- seq(1, 12)
-  x2 <- seq(1, 12, length.out = 365)
-  ny1 <- dim(merra_par)[1]
-  ny2 <- dim(merra_par)[2]
-
-  bparam <- cbind(
-    KEXT = rnorm_gt0(nens, 0.5, 0.15),
-    LAR = rnorm_gt0(nens, 1.5, 0.3),
-    # Default LUE: 0.002
-    ## LUE = rlnorm(1, log(0.002), 0.4),
-    LUE = rnorm_gt0(nens, 0.002, 0.0005),
-    GAMMA = rnorm_gt0(nens, 0.4, 0.05),
-    tauV = rnorm(nens, 1440, 10),
-    tauS = rnorm(nens, 27370, 100),
-    tauR = rnorm(nens, 1440, 10),
-    Av = rnorm(nens, 0.5, 0.05),
-    Cv = rnorm(nens, 3, 0.5),
-    Cs = rnorm(nens, 15, 1),
-    Cr = rnorm(nens, 3, 0.5)
-  )
-
-  bout <- array(numeric(), c(ny1, ny2, nens, 4))
-  for (i in seq_len(ny1)) {
-    message("Progress: ", i, " of ", ny1)
-    for (j in seq_len(ny2)) {
-      if (!all(is.na(merra_par[i,j,]))) {
-        if (!is.null(vsem_Cv0)) {
-          Cv0 <- vsem_Cv0[j,i]
-        } else {
-          Cv0 <- 3
-        }
-        if (!is.na(Cv0) & !Cv0 > 0) next
-        par <- spline(x1, xout = x2, y = merra_par[i,j,])$y / 2
-        for (s in seq_len(nens)) {
-          vsem <- VSEM_random(par, Cv0)
-          bparam[s,] <- vsem$params
-          bout[i,j,s,] <- colMeans(vsem$vsem)
-        }
-      }
-    }
-  }
-  list(bout = bout, bparam = bparam)
 }
 
 distribution_overlap <- function(r1, r2) {
@@ -171,7 +117,8 @@ joint_raster <- function(r1, r2) {
 }
 
 raster_likelihood <- function(r, target, f = mean) {
-  rsub <- raster::resample(r, target)
+  ## rsub <- raster::resample(r, target)
+  rsub <- r
   pr <- rsub
   pr[] <- dnorm(rsub[], target[["Mean"]][], target[["SD"]][], log = TRUE)
   pr[pr < quantile(pr, 0.05)] <- NA
@@ -180,22 +127,16 @@ raster_likelihood <- function(r, target, f = mean) {
 
 madingley_moose_raster <- function(f, base) {
   .datatable.aware <- TRUE #nolint
-  # Area of a 1 degree grid cell
-  # HACK: Assuming it's constant, but should really vary with latitude
-  ft2km <- 30.48 / (100 * 1000)
-  latsize <- 364000 * ft2km
-  lonsize <- 288200 * ft2km
   mad_moose <- data.table::fread(f)
-  mad_moose[, degree_area := latsize * lonsize]
-  # BodyMass is in g -- here, restrict to mass > 300 kg
+  # BodyMass is in g -- here, restrict to mass > 400 kg
   # Individual biomass == Adult biomass
   dat <- mad_moose[IndividualBodyMass == AdultMass &
                      AdultMass > 400000,
-                     .(density = sum(CohortAbundance) / degree_area),
+                     .(abundance = sum(CohortAbundance)),
                      .(Latitude, Longitude)]
   mad_moose_sf <- sf::st_as_sf(dat, coords = c("Longitude", "Latitude"),
                                crs = sf::st_crs(4326))
-  rasterize(mad_moose_sf, base, field = "density")
+  rasterize(mad_moose_sf, base, field = "abundance")
 }
 
 land_shape <- function() {
